@@ -17,10 +17,10 @@ from telegram.ext import (
 
 # ================== НАСТРОЙКИ ==================
 
-TOKEN = os.getenv("BOT_TOKEN")
+TOKEN = os.getenv("8517986852:AAEVhzH7Ez6eqKoj1JHcIb957KjWLYhN0ig")
 
 # Публичный канал, куда публикуем
-CHANNEL = os.getenv("CHANNEL", "@your_channel")
+CHANNEL = os.getenv("CHANNEL", "@minskiyes")
 
 # Кнопка "Предложить новость"
 SUGGEST_TO = "https://t.me/stridiv"
@@ -83,4 +83,110 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 async def myid(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.rep
+    await update.message.reply_text(
+        f"🆔 Ваш Telegram ID: {update.effective_user.id}"
+    )
+
+
+async def test(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text(
+        f"⚙️ Текущие настройки:\n\n"
+        f"CHANNEL: {CHANNEL}\n"
+        f"SUBSCRIBE_TO: {SUBSCRIBE_TO}\n"
+        f"SUGGEST_TO: {SUGGEST_TO}\n"
+        f"ALLOWED_ADMINS: {', '.join(map(str, ALLOWED_ADMINS)) or 'не задано'}"
+    )
+
+
+# ================== ПУБЛИКАЦИЯ ==================
+
+async def publish(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not update.message:
+        return
+
+    user_id = update.effective_user.id if update.effective_user else None
+    if not is_allowed(user_id):
+        await update.message.reply_text("⛔ У вас нет прав на публикацию.")
+        return
+
+    msg = update.message
+
+    # ТЕКСТ
+    if msg.text and not any([msg.photo, msg.video, msg.document, msg.animation]):
+        await context.bot.send_message(
+            chat_id=CHANNEL,
+            text=msg.text,
+            reply_markup=post_keyboard(),
+            parse_mode=ParseMode.HTML,
+        )
+        await msg.reply_text("✅ Пост опубликован.")
+        return
+
+    # ФОТО
+    if msg.photo:
+        await context.bot.send_photo(
+            chat_id=CHANNEL,
+            photo=msg.photo[-1].file_id,
+            caption=msg.caption,
+            reply_markup=post_keyboard(),
+            parse_mode=ParseMode.HTML,
+        )
+        await msg.reply_text("✅ Фото опубликовано.")
+        return
+
+    # ВИДЕО
+    if msg.video:
+        await context.bot.send_video(
+            chat_id=CHANNEL,
+            video=msg.video.file_id,
+            caption=msg.caption,
+            reply_markup=post_keyboard(),
+            parse_mode=ParseMode.HTML,
+        )
+        await msg.reply_text("✅ Видео опубликовано.")
+        return
+
+    # GIF
+    if msg.animation:
+        await context.bot.send_animation(
+            chat_id=CHANNEL,
+            animation=msg.animation.file_id,
+            caption=msg.caption,
+            reply_markup=post_keyboard(),
+        )
+        await msg.reply_text("✅ GIF опубликован.")
+        return
+
+    # ДОКУМЕНТ
+    if msg.document:
+        await context.bot.send_document(
+            chat_id=CHANNEL,
+            document=msg.document.file_id,
+            caption=msg.caption,
+            reply_markup=post_keyboard(),
+        )
+        await msg.reply_text("✅ Документ опубликован.")
+        return
+
+    await msg.reply_text("⚠️ Этот тип сообщения пока не поддерживается.")
+
+
+# ================== ЗАПУСК ==================
+
+def main():
+    if not TOKEN:
+        raise RuntimeError("❌ Не задан BOT_TOKEN")
+
+    app = Application.builder().token(TOKEN).build()
+
+    app.add_handler(CommandHandler("start", start))
+    app.add_handler(CommandHandler("myid", myid))
+    app.add_handler(CommandHandler("test", test))
+    app.add_handler(MessageHandler(filters.ALL & ~filters.COMMAND, publish))
+
+    print("🤖 Бот запущен")
+    app.run_polling()
+
+
+if __name__ == "__main__":
+    main()
