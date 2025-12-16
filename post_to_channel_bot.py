@@ -17,10 +17,10 @@ from telegram.ext import (
 
 # ================== НАСТРОЙКИ ==================
 
-TOKEN = os.getenv("BOT_TOKEN")
+TOKEN = os.getenv("8517986852:AAEVhzH7Ez6eqKoj1JHcIb957KjWLYhN0ig")
 
 # Публичный канал, куда публикуем
-CHANNEL = os.getenv("CHANNEL", "@your_channel")
+CHANNEL = os.getenv("CHANNEL", "@minskiyes")
 
 # Кнопка "Предложить новость"
 SUGGEST_TO = "https://t.me/stridiv"
