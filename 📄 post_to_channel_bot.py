@@ -1,11 +1,7 @@
 import os
 from typing import Optional
 
-from telegram import (
-    Update,
-    InlineKeyboardButton,
-    InlineKeyboardMarkup,
-)
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.constants import ParseMode
 from telegram.ext import (
     Application,
@@ -15,90 +11,61 @@ from telegram.ext import (
     filters,
 )
 
-# ================== НАСТРОЙКИ ==================
+TOKEN = (os.getenv("BOT_TOKEN") or "").strip()
+CHANNEL = (os.getenv("CHANNEL") or "@your_channel").strip()
 
-TOKEN = os.getenv("8517986852:AAEVhzH7Ez6eqKoj1JHcIb957KjWLYhN0ig")
-
-# Публичный канал, куда публикуем
-CHANNEL = os.getenv("CHANNEL", "@minskiyes")
-
-# Кнопка "Предложить новость"
 SUGGEST_TO = "https://t.me/stridiv"
 
-# Кнопка "Подписаться на канал"
-SUBSCRIBE_TO = os.getenv(
-    "SUBSCRIBE_TO",
-    f"https://t.me/{CHANNEL.lstrip('@')}"
-)
+SUBSCRIBE_TO = (os.getenv("SUBSCRIBE_TO") or "").strip()
+if not SUBSCRIBE_TO:
+    SUBSCRIBE_TO = f"https://t.me/{CHANNEL.lstrip('@')}"
 
-# Кто может публиковать (через запятую)
-# Пример: 123456789,987654321
 ALLOWED_ADMINS = set()
-raw_admins = os.getenv("ALLOWED_ADMINS", "")
+raw_admins = (os.getenv("ALLOWED_ADMINS") or "").strip()
 if raw_admins:
-    for uid in raw_admins.split(","):
-        uid = uid.strip()
-        if uid.isdigit():
-            ALLOWED_ADMINS.add(int(uid))
+    for part in raw_admins.split(","):
+        part = part.strip()
+        if part.isdigit():
+            ALLOWED_ADMINS.add(int(part))
 
 
-# ================== КНОПКИ ==================
-
-def post_keyboard():
+def post_keyboard() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
-        [
-            [
-                InlineKeyboardButton(
-                    "✅ Подписаться на канал",
-                    url=SUBSCRIBE_TO
-                ),
-                InlineKeyboardButton(
-                    "✉️ Предложить новость",
-                    url=SUGGEST_TO
-                ),
-            ]
-        ]
+        [[
+            InlineKeyboardButton("✅ Подписаться на канал", url=SUBSCRIBE_TO),
+            InlineKeyboardButton("✉️ Предложить новость", url=SUGGEST_TO),
+        ]]
     )
 
 
-# ================== ПРОВЕРКИ ==================
-
 def is_allowed(user_id: Optional[int]) -> bool:
-    if not user_id:
+    if user_id is None:
         return False
-    return not ALLOWED_ADMINS or user_id in ALLOWED_ADMINS
+    return (len(ALLOWED_ADMINS) == 0) or (user_id in ALLOWED_ADMINS)
 
-
-# ================== КОМАНДЫ ==================
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
-        "👋 Привет!\n\n"
-        "Пришли мне текст, фото или видео — я опубликую это в канале "
-        "с кнопками «Подписаться» и «Предложить новость».\n\n"
+        "👋 Привет! Пришли текст/фото/видео/документ — я опубликую это в канале с кнопками.\n\n"
         "Команды:\n"
         "/myid — узнать свой Telegram ID\n"
-        "/test — проверить настройки"
+        "/test — показать настройки"
     )
 
 
 async def myid(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text(
-        f"🆔 Ваш Telegram ID: {update.effective_user.id}"
-    )
+    await update.message.reply_text(f"🆔 Ваш Telegram ID: {update.effective_user.id}")
 
 
 async def test(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
-        f"⚙️ Текущие настройки:\n\n"
+        "⚙️ Настройки:\n"
         f"CHANNEL: {CHANNEL}\n"
         f"SUBSCRIBE_TO: {SUBSCRIBE_TO}\n"
         f"SUGGEST_TO: {SUGGEST_TO}\n"
-        f"ALLOWED_ADMINS: {', '.join(map(str, ALLOWED_ADMINS)) or 'не задано'}"
+        f"ALLOWED_ADMINS: {', '.join(map(str, sorted(ALLOWED_ADMINS))) if ALLOWED_ADMINS else 'не задано (разрешены все)'}"
     )
 
-
-# ================== ПУБЛИКАЦИЯ ==================
 
 async def publish(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not update.message:
@@ -106,72 +73,71 @@ async def publish(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     user_id = update.effective_user.id if update.effective_user else None
     if not is_allowed(user_id):
-        await update.message.reply_text("⛔ У вас нет прав на публикацию.")
+        await update.message.reply_text("⛔️ Нет прав на публикацию через этого бота.")
         return
 
     msg = update.message
 
-    # ТЕКСТ
-    if msg.text and not any([msg.photo, msg.video, msg.document, msg.animation]):
-        await context.bot.send_message(
-            chat_id=CHANNEL,
-            text=msg.text,
-            reply_markup=post_keyboard(),
-            parse_mode=ParseMode.HTML,
-        )
-        await msg.reply_text("✅ Пост опубликован.")
-        return
+    try:
+        if msg.text and not (msg.photo or msg.video or msg.document or msg.animation):
+            await context.bot.send_message(
+                chat_id=CHANNEL,
+                text=msg.text,
+                reply_markup=post_keyboard(),
+                parse_mode=ParseMode.HTML,
+            )
+            await msg.reply_text("✅ Опубликовано в канал.")
+            return
 
-    # ФОТО
-    if msg.photo:
-        await context.bot.send_photo(
-            chat_id=CHANNEL,
-            photo=msg.photo[-1].file_id,
-            caption=msg.caption,
-            reply_markup=post_keyboard(),
-            parse_mode=ParseMode.HTML,
-        )
-        await msg.reply_text("✅ Фото опубликовано.")
-        return
+        if msg.photo:
+            await context.bot.send_photo(
+                chat_id=CHANNEL,
+                photo=msg.photo[-1].file_id,
+                caption=msg.caption or "",
+                reply_markup=post_keyboard(),
+                parse_mode=ParseMode.HTML,
+            )
+            await msg.reply_text("✅ Фото опубликовано.")
+            return
 
-    # ВИДЕО
-    if msg.video:
-        await context.bot.send_video(
-            chat_id=CHANNEL,
-            video=msg.video.file_id,
-            caption=msg.caption,
-            reply_markup=post_keyboard(),
-            parse_mode=ParseMode.HTML,
-        )
-        await msg.reply_text("✅ Видео опубликовано.")
-        return
+        if msg.video:
+            await context.bot.send_video(
+                chat_id=CHANNEL,
+                video=msg.video.file_id,
+                caption=msg.caption or "",
+                reply_markup=post_keyboard(),
+                parse_mode=ParseMode.HTML,
+            )
+            await msg.reply_text("✅ Видео опубликовано.")
+            return
 
-    # GIF
-    if msg.animation:
-        await context.bot.send_animation(
-            chat_id=CHANNEL,
-            animation=msg.animation.file_id,
-            caption=msg.caption,
-            reply_markup=post_keyboard(),
-        )
-        await msg.reply_text("✅ GIF опубликован.")
-        return
+        if msg.animation:
+            await context.bot.send_animation(
+                chat_id=CHANNEL,
+                animation=msg.animation.file_id,
+                caption=msg.caption or "",
+                reply_markup=post_keyboard(),
+                parse_mode=ParseMode.HTML,
+            )
+            await msg.reply_text("✅ GIF опубликован.")
+            return
 
-    # ДОКУМЕНТ
-    if msg.document:
-        await context.bot.send_document(
-            chat_id=CHANNEL,
-            document=msg.document.file_id,
-            caption=msg.caption,
-            reply_markup=post_keyboard(),
-        )
-        await msg.reply_text("✅ Документ опубликован.")
-        return
+        if msg.document:
+            await context.bot.send_document(
+                chat_id=CHANNEL,
+                document=msg.document.file_id,
+                caption=msg.caption or "",
+                reply_markup=post_keyboard(),
+                parse_mode=ParseMode.HTML,
+            )
+            await msg.reply_text("✅ Документ опубликован.")
+            return
 
-    await msg.reply_text("⚠️ Этот тип сообщения пока не поддерживается.")
+        await msg.reply_text("⚠️ Пришли текст/фото/видео/документ/гиф — этот тип пока не поддержан.")
 
+    except Exception as e:
+        await msg.reply_text(f"❌ Ошибка при публикации: {e}")
 
-# ================== ЗАПУСК ==================
 
 def main():
     if not TOKEN:
@@ -184,8 +150,8 @@ def main():
     app.add_handler(CommandHandler("test", test))
     app.add_handler(MessageHandler(filters.ALL & ~filters.COMMAND, publish))
 
-    print("🤖 Бот запущен")
-    app.run_polling()
+    print("🤖 Bot started")
+    app.run_polling(allowed_updates=Update.ALL_TYPES)
 
 
 if __name__ == "__main__":
